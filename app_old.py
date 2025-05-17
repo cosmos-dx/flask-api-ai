@@ -11,15 +11,21 @@ from pydantic import BaseModel, Field, ValidationError, RootModel
 import random
 from pymongo import MongoClient
 
-os.environ["GOOGLE_API_KEY"]="AIzaSyDJQ9e80Hw-oZdCx1cUDIX0giAR1vGFqXA"
+os.environ["GOOGLE_API_KEY"]="Your_API_Key"
 
 app = Flask(__name__)
 CORS(app) 
 
 
-# MongoDB Connection
 mongo_uri = os.getenv("MONGO_URI")
 client = MongoClient(mongo_uri)
+
+try:
+    client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+except Exception as e:
+    print(e)
+    
 db = client["adzat_interview"] 
 collection = db["interview_data"] 
 
@@ -35,39 +41,35 @@ def extract_data_from_pdf(pdf_file):
 def generate_unique_id():
     return str(uuid.uuid4())
 
-def save_to_db(unique_id, resume_text=None, questions=None, db_path='test_db.json'):
-    if os.path.exists(db_path):
-        with open(db_path, 'r') as f:
-            try:
-                db = json.load(f)
-            except json.JSONDecodeError:
-                db = {}
-    else:
-        db = {}
+def save_to_db(unique_id, resume_text=None, questions=None):
+    doc = collection.find_one({"user_id": unique_id})
 
-    if unique_id not in db:
-        db[unique_id] = {
+    if not doc:
+        doc = {
+            "user_id": unique_id,
             "resume": resume_text or "",
-            "questions_list": None,
+            "questions_list": questions or [],
             "solutions": [],
-            "qna":[],
+            "qna": [],
             "question_index": 0,
             "current_answer": "",
             "current_question": "",
             "subquestion": "",
             "subquestion_count": 2,
-            "job_description":"",
+            "job_description": "",
             "satisfactory_till_now": True,
-            'current_subquestion': ""
+            "current_subquestion": ""
         }
+        collection.insert_one(doc)
+    else:
+        update_fields = {}
+        if resume_text:
+            update_fields["resume"] = resume_text
+        if questions:
+            update_fields["questions_list"] = questions
 
-    if resume_text:
-        db[unique_id]["resume"] = resume_text
-    if questions:
-        db[unique_id]["questions_list"] = questions
-
-    with open(db_path, 'w') as f:
-        json.dump(db, f, indent=4)
+        if update_fields:
+            collection.update_one({"user_id": unique_id}, {"$set": update_fields})
 
 
 try:
@@ -199,67 +201,78 @@ def upload_resume():
 
 @app.route('/ask_question', methods=['GET'])
 def get_next_question():
-    with open("test_db.json", "r") as file:
-        data = json.load(file)
-
     user_id = request.form.get('id') 
-    user_data = data.get(user_id)
+
+    if not user_id:
+        return jsonify({"error": "Missing user ID"}), 400
+
+    user_data = collection.find_one({"user_id": user_id})
 
     if not user_data:
         return jsonify({"error": "User not found"}), 404
 
-    questions = user_data["questions_list"]
-    question_index = user_data["question_index"]
+    questions = user_data.get("questions_list", [])
+    question_index = user_data.get("question_index", 0)
     subquestion = user_data.get("subquestion", "").strip()
     subquestion_count = user_data.get("subquestion_count", 0)
 
-    #if subquestion is present, ask it first
+    # If a subquestion is pending
     if subquestion and subquestion_count > 0:
-        user_data["current_subquestion"] = subquestion
-        user_data["current_question"] = subquestion
-        user_data["subquestion_count"] = max(0, subquestion_count - 1)
-        user_data["subquestion"] = ""  
-
-        with open("test_db.json", "w") as file:
-            json.dump(data, file, indent=4)
-
+        collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "current_subquestion": subquestion,
+                    "current_question": subquestion,
+                    "subquestion": "",
+                },
+                "$inc": {"subquestion_count": -1}
+            }
+        )
         return jsonify({
             "user_id": user_id,
-            "question": user_data["current_subquestion"]
+            "question": subquestion
         })
-    #no more questions
+
+    # No more questions
     if question_index >= len(questions):
-        user_data['current_question'] = ""
-        user_data['current_answer'] = ""
-        user_data['subquestion'] = ""
-        user_data['current_subquestion'] = ""
-        ###########################################
-        with open("test_db.json", "w") as file:
-            json.dump(data, file, indent=4)
-        ###########################################
+        collection.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "current_question": "",
+                    "current_answer": "",
+                    "subquestion": "",
+                    "current_subquestion": ""
+                }
+            }
+        )
         return jsonify({
             "user_id": user_id,
             "message": "All questions have been asked"
         })
 
-    user_data['subquestion_count'] = 2
-    user_data['subquestion'] = ""
-    print(questions)
-    print(questions[0])
-    print(question_index)
     next_question = questions[question_index]
-    user_data["current_question"] = next_question
-    user_data["current_subquestion"] = ""
-    user_data["question_index"] += 1
 
-    with open("test_db.json", "w") as file:
-        json.dump(data, file, indent=4)
+    collection.update_one(
+        {"user_id": user_id},
+        {
+            "$set": {
+                "current_question": next_question,
+                "current_subquestion": "",
+                "subquestion": "",
+                "subquestion_count": 2
+            },
+            "$inc": {
+                "question_index": 1
+            }
+        }
+    )
 
     return jsonify({
         "user_id": user_id,
         "question": next_question
     })
-
 def evaluate_answer(question: str, resume: str, user_answer: str, subquestion_count: int, model_name="gemini-1.5-flash-latest") -> tuple[bool, str, bool]:
     prompt = f"""
     You are an AI Technical Interview Evaluator. The question below was generated earlier based on the user's resume. Evaluate if the candidate's answer is relevant and technically sufficient.
@@ -332,44 +345,58 @@ def acknowledgement_pool():
     ]
     return random.choice(sentences)
 
+
 @app.route('/give_answer', methods=['POST'])
 def update_user_response():
     req_data = request.get_json()
     user_id = req_data.get('id')
     user_answer = req_data.get('answer')
-    with open("test_db.json", "r") as f:
-        data = json.load(f)
 
-    user_data = data.get(user_id)
+    if not user_id or not user_answer:
+        return jsonify({"error": "Missing user ID or answer"}), 400
+
+    user_data = collection.find_one({"user_id": user_id})
     if not user_data:
         print(f"No data found for user_id: {user_id}")
-        return
-    user_data["current_answer"] = user_answer
+        return jsonify({"error": "User not found"}), 404
+
     current_question = user_data.get("current_question", "").strip()
-    response_entry = {
+    subquestion_count = user_data.get("subquestion_count", 0)
+    resume = user_data.get("resume", "")
+
+    # Append to QnA list
+    qna_entry = {
         "question": current_question,
         "answer": user_answer
     }
-    user_data.setdefault("qna", []).append(response_entry)
 
-    print(current_question)
+    updated_qna = user_data.get("qna", [])
+    updated_qna.append(qna_entry)
 
-    subquestion_count = user_data['subquestion_count']
-    resume = user_data['resume']
-    is_satisfactory, feedback, subquestion_bool = evaluate_answer(current_question, resume, user_answer, subquestion_count)
-    user_data["satisfactory_till_now"] = is_satisfactory
-    if(subquestion_bool):
-        user_data['subquestion'] = feedback
-        user_data['current_question'] = feedback
+    # Evaluate the answer
+    is_satisfactory, feedback, subquestion_bool = evaluate_answer(
+        current_question, resume, user_answer, subquestion_count
+    )
 
-    with open('test_db.json', "w") as f:
-        json.dump(data, f, indent=4)
-    
+    update_fields = {
+        "current_answer": user_answer,
+        "satisfactory_till_now": is_satisfactory,
+        "qna": updated_qna
+    }
+
+    if subquestion_bool:
+        update_fields["subquestion"] = feedback
+        update_fields["current_question"] = feedback
+
+    collection.update_one(
+        {"user_id": user_id},
+        {"$set": update_fields}
+    )
+
     if subquestion_count == 0:
         return jsonify({"user_id": user_id, "feedback": acknowledgement_pool()})
+
     return jsonify({"user_id": user_id, "feedback": feedback})
-
-
 
 
 @app.route('/provide_report', methods=['POST'])

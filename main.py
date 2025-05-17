@@ -10,7 +10,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, ValidationError
 
 
-
+os.environ["GOOGLE_API_KEY"]="AIzaSyDJQ9e80Hw-oZdCx1cUDIX0giAR1vGFqXA"
 
 app = Flask(__name__)
 CORS(app) 
@@ -367,9 +367,4 @@ def provide_report():
     return jsonify(result)
 
 if __name__ == '__main__':
-    # app.run(host=os.getenv('HOST'), port=int(os.getenv('PORT'),8080), debug=False)
-    app.run(
-        host=os.getenv('HOST', '0.0.0.0'), 
-        port=int(os.getenv('PORT', '8080')),
-        debug=False
-    )
+    app.run(debug=True)
