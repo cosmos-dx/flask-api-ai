@@ -28,10 +28,8 @@ class IDGenerator:
     def generate_unique_id() -> str:
         return str(uuid.uuid4())
 
-# -------------------- Database Manager --------------------
-# Handles DB related tasks
-
-
+# -------------------- Questions Manager --------------------
+# Generates Questions
 class QuestionGenerator:
     def __init__(self, model_name: str = "gemini-1.5-flash-latest"):
         generation_config = genai.types.GenerationConfig(
@@ -89,6 +87,9 @@ class QuestionGenerator:
             print(f"Unexpected error: {e}")
             return None
 
+
+# -------------------- Answers Manager --------------------
+# Manages User's Answers
 class AIAnswerEvaluator:
     def __init__(self, model_name: str = "gemini-1.5-flash-latest"):
         self.model_name = model_name
@@ -146,6 +147,8 @@ class AIAnswerEvaluator:
             print(f"Error during AI evaluation: {e}")
             return False, "An error occurred during evaluation.", False
 
+# -------------------- Ack Manager --------------------
+# Generates Acknowledgements
 class AcknowledgementService:
     @staticmethod
     def get_message():

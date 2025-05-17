@@ -5,7 +5,7 @@ import os
 import google.generativeai as genai
 from pymongo import MongoClient
 
-os.environ["GOOGLE_API_KEY"]="AIzaSyDJQ9e80Hw-oZdCx1cUDIX0giAR1vGFqXA"
+# os.environ["GOOGLE_API_KEY"]="YOUR_API_KEY"
 
 app = Flask(__name__)
 CORS(app) 
@@ -34,7 +34,7 @@ except ValueError as e:
     print("Please set the GOOGLE_API_KEY environment variable before running the script.")
 
 
-# -------------------- Flask Route --------------------
+# -------------------- questions generation from resume --------------------
 @app.route('/upload_resume', methods=['POST'])
 def upload_resume():
     if 'resume' not in request.files:
@@ -55,16 +55,14 @@ def upload_resume():
         generated_questions = generator.generate_questions(resume_text, job_description)
 
         if generated_questions:
-            print("\n--- Successfully Generated Questions ---")
             db_handler.save(unique_id, resume_text, generated_questions, job_description)
         else:
-            print("\n--- Failed to Generate Questions ---")
-
+            return jsonify({"error": "error question generation"}), 500
         return jsonify({"user_id": unique_id})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# -------------------- Flask Route --------------------
+# -------------------- ask next question --------------------
 @app.route('/ask_question', methods=['GET'])
 def get_next_question():
     user_id = request.form.get('id') 
@@ -82,7 +80,7 @@ def get_next_question():
     subquestion = user_data.get("subquestion", "").strip()
     subquestion_count = user_data.get("subquestion_count", 0)
 
-    # If a subquestion is pending
+    #if a subquestion is pending
     if subquestion and subquestion_count > 0:
         collection.update_one(
             {"user_id": user_id},
@@ -100,7 +98,7 @@ def get_next_question():
             "question": subquestion
         })
 
-    # No more questions
+    #no more questions left
     if question_index >= len(questions):
         collection.update_one(
             {"user_id": user_id},
@@ -140,7 +138,7 @@ def get_next_question():
         "question": next_question
     })
 
-# -------------------- Flask Route --------------------
+# -------------------- analyse the answer and ask subquestions if required --------------------
 @app.route('/give_answer', methods=['POST'])
 def update_user_response():
     req_data = request.get_json()
@@ -162,7 +160,7 @@ def update_user_response():
     subquestion_count = user_data.get("subquestion_count", 0)
     resume = user_data.get("resume", "")
 
-    # Append to QnA
+    #append to QnA list
     updated_qna = user_data.get("qna", [])
     updated_qna.append({
         "question": current_question,
@@ -192,4 +190,8 @@ def update_user_response():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(
+        host=os.getenv('HOST', '0.0.0.0'), 
+        port=int(os.getenv('PORT', '8080')),
+        debug=False
+    )

@@ -1,5 +1,8 @@
 from typing import List
 
+"""
+Mongo DB related tasks
+"""
 class ResumeDB:
     def __init__(self, collection):
         self.collection = collection
