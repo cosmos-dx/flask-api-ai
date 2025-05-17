@@ -10,7 +10,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, ValidationError
 
 
-os.environ["GOOGLE_API_KEY"]="AIzaSyDJQ9e80Hw-oZdCx1cUDIX0giAR1vGFqXA"
+
 
 app = Flask(__name__)
 CORS(app) 
