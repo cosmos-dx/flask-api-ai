@@ -5,7 +5,7 @@ import os
 import google.generativeai as genai
 from pymongo import MongoClient
 
-os.environ["GOOGLE_API_KEY"]="AIzaSyDJQ9e80Hw-oZdCx1cUDIX0giAR1vGFqXA"
+os.environ["GOOGLE_API_KEY"]="Your_API_KEy"
 
 app = Flask(__name__)
 CORS(app) 
