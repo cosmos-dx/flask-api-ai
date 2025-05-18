@@ -65,7 +65,7 @@ def upload_resume():
 # -------------------- ask next question --------------------
 @app.route('/ask_question', methods=['GET'])
 def get_next_question():
-    user_id = request.form.get('id') 
+    user_id = request.params.get('id') 
 
     if not user_id:
         return jsonify({"error": "Missing user ID"}), 400
