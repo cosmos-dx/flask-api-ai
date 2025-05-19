@@ -5,6 +5,7 @@ import os
 import google.generativeai as genai
 from pymongo import MongoClient
 from openai import OpenAI
+from werkzeug.utils import secure_filename
 # os.environ["GOOGLE_API_KEY"]="YOUR_API_KEY"
 
 app = Flask(__name__)
