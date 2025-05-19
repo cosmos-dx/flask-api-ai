@@ -184,7 +184,7 @@ def update_user_response():
     user_db.update_user(user_id, update_fields)
 
     if subquestion_count == 0:
-        return jsonify({"user_id": user_id, "feedback": ack_service.get_message()})
+        return jsonify({"user_id": user_id, "feedback": ack_service.get_message(), "success":"success"})
 
     return jsonify({"user_id": user_id, "feedback": feedback})
 
