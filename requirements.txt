@@ -4,3 +4,4 @@ pdfplumber
 google-generativeai
 pydantic
 pymongo
+openai
