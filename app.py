@@ -10,9 +10,15 @@ from pymongo import MongoClient
 app = Flask(__name__)
 CORS(app) 
 
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'wav', 'mp3', 'ogg', 'flac', 'm4a'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 mongo_uri = os.getenv("MONGO_URI")
 client = MongoClient(mongo_uri)
+
+client_openAI = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 try:
     client.admin.command('ping')
@@ -187,6 +193,45 @@ def update_user_response():
         return jsonify({"user_id": user_id, "feedback": ack_service.get_message(), "success":"success"})
 
     return jsonify({"user_id": user_id, "feedback": feedback})
+
+
+#--------------------------- Transcribe the audio ---------------------------#
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def transcribe_audio_openai(audio_file_path):
+    try:
+        with open(audio_file_path, "rb") as audio_file:
+            transcript = client_openAI.audio.transcriptions.create(
+                model="whisper-1",
+                file=audio_file
+            )
+        return transcript.text
+    except FileNotFoundError:
+        return "Error: Audio file not found."
+    except Exception as e:
+        return f"An error occurred: {e}"
+
+@app.route('/transcribe', methods=['POST'])
+def upload_file():
+    if 'audio_file' not in request.files:
+        return jsonify({'error': 'No audio file part in the request'}), 400
+
+    file = request.files['audio_file']
+
+    if file.filename == '':
+        return jsonify({'error': 'No selected audio file'}), 400
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+
+        transcription = transcribe_audio_openai(file_path)
+        os.remove(file_path)  
+
+        return jsonify({'transcription': transcription}), 200
+
+    return jsonify({'error': 'Invalid file format. Allowed formats are: wav, mp3, ogg, flac, m4a'}), 400
 
 
 if __name__ == '__main__':
